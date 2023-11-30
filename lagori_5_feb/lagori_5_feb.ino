@@ -1,0 +1,219 @@
+#include <positionalnew.h>
+
+// m2 hori
+#define ppwm1 13
+#define pdir1 14
+
+// m2 enc
+#define enc1 26
+#define enc2 27
+
+// m1 vert
+#define ppwm2 4
+#define pdir2 15
+
+// m1 enc
+#define enc3 32//18
+#define enc4 33//19
+
+#define lsDown 23
+#define lsclose 22
+
+UniversalEncoder m2enc(enc1, enc2), m1enc(enc3, enc4);
+Motor m2(ppwm1, pdir1), m1(ppwm2, pdir2);
+positionalnew pid1(&m2), pid2(&m1);
+
+int start = 0, setpointH = 0, setpointV = 0, pwm1 = 0, pwm2 = 0;
+bool m1stop = false, verticalflag = false, m2stop = true, horizontalflag = false;
+//int lvertical5 = 5500,
+//    lvertical4 = 10250,
+//    lvertical3 = 14890,
+//    lvertical2 = 19680,
+//    lvertical1 = 22335,
+//
+//    lhorizontal5 = 1400,
+//    lhorizontal4 = 2561,
+//    lhorizontal3 = 3433,
+//    lhorizontal2 = 4838,
+//    lhorizontal1 = 5850;
+
+int lvertical5 = -1200,
+    lvertical4 = -1200,
+    lvertical3 = -1200,
+    lvertical2 = -1200,
+    lvertical1 = -1200,
+
+    lhorizontal5 = 600,
+    lhorizontal4 = 1000,
+    lhorizontal3 = 1400,
+    lhorizontal2 = 1800,
+    lhorizontal1 = 2200;
+
+void initreset()
+{
+  m1.setPWM(0);
+  m2.setPWM(0);
+  pid1.setPulse(m1.getReadings());
+  pid2.setPulse(m2.getReadings());
+  setpointH = 0;
+  setpointV = 0;
+  m1stop = false, m2stop = true, verticalflag = false, horizontalflag = false;
+}
+
+void setup()
+{
+  Serial.begin(115200);
+
+  pinMode(lsDown, INPUT_PULLUP);
+  pinMode(lsclose, INPUT_PULLUP);
+
+  m1.setEncoder(&m1enc);
+  m2.setEncoder(&m2enc);
+
+  pid1.setThreshold(400);
+  pid1.setOutputLimits(-50, 50);
+  pid1.setAggTunings(1.09, 0, 0);
+  pid1.setSoftTunings(0.2, 0, 0);
+
+  pid2.setThreshold(400);
+  pid2.setOutputLimits(-50, 50);
+  pid2.setAggTunings(1.09, 0, 0);
+  pid2.setSoftTunings(0.2, 0, 0);
+}
+void loop()
+{
+  if (Serial.available())
+  {
+    start = Serial.readStringUntil(',').toInt();
+    pwm1 = Serial.readStringUntil(',').toInt();
+    pwm2 = Serial.readStringUntil('\n').toInt();
+  }
+
+  Serial.println(String(m1.getReadings()) + ", " + String(m2.getReadings()) + ", " + String(digitalRead(lsDown)) + ", " + String(digitalRead(lsclose)) + ", " + String(pwm1) + ", " + String(pwm2));
+
+  if (start == 0)
+  {
+    if (horizontalflag)
+    {
+      Serial.println("m1");
+//      Serial.println(String(pid2.Input) + ", " + String(pid2.Output) + ", " + String(pid2.Setpoint) + ", ");
+      pid2.compute();
+    }
+
+    if (verticalflag)
+    {
+      Serial.println("m2");
+      pid1.compute();
+    }
+  }
+
+  //  if(start == 1)
+  //  {
+  //    m1.setPWM(pwm1);
+  //    Serial.println("start 1 " + String(pwm1));
+  //  }
+  //  else if(start == 2)
+  //  {
+  //    m1.setPWM(-pwm1);
+  //    Serial.println("start 2 " + String(-pwm1));
+  //  }
+  //  Serial.print(digitalRead(lsDown));
+  //  Serial.print(", ");
+  //  Serial.println(digitalRead(lsclose));
+  //Default HIGH
+
+  if (start == 1)
+  {
+    if (digitalRead(lsDown) == HIGH && !m1stop)
+    {
+      //      Serial.println("m1 start");
+      m1.setPWM(pwm1);
+    }
+    else if (digitalRead(lsDown) == LOW && !m1stop)
+    {
+      Serial.print("m1 stop");
+      //      pwm2 = pwm2 * -1;
+      //      m2.setPWM(-pwm2);
+      //      Serial.println("m2 start" + String(pwm2));
+      m1stop = true;
+      m1.setPWM(0);
+//      m1.reset();
+      start = -1;
+    }
+    //    else if (digitalRead(lsDown) == HIGH && m1stop)
+    //    {
+    //      m1.setPWM(0);
+    //      start = 0;
+    //      m1stop = !m1stop;
+    //    }
+  }
+
+  if (digitalRead(lsclose) == LOW)// && m2stop) // lsclose is a key of controller
+  {
+//    Serial.println("horizontal move");
+    m2.setPWM(-pwm2);
+    m2stop = !m2stop;
+  }
+  else
+  {
+    //    Serial.println("horizontal stop");
+    m2.setPWM(0);
+    //    start = 2;
+    m2stop = true;
+  }
+
+  if (start == 2)
+  {
+    //    pid1.compute();
+    if (abs(lhorizontal5 - m2.getReadings()) <= 200)
+    {
+      pid2.setPulse(lvertical5 + 50);
+      setpointV = lvertical5;
+    }
+    else if (abs(lhorizontal4 - m2.getReadings()) <= 200)
+    {
+      pid2.setPulse(lvertical4 + 50);
+      setpointV = lvertical4;
+    }
+    else if (abs(lhorizontal3 - m2.getReadings()) <= 200)
+    {
+      pid2.setPulse(lvertical3 + 50);
+      setpointV = lvertical3;
+    }
+    else if (abs(lhorizontal2 - m2.getReadings()) <= 200)
+    {
+      pid2.setPulse(lvertical2 + 50);
+      setpointV = lvertical2;
+    }
+    else if (abs(lhorizontal1 - m2.getReadings()) <= 200)
+    {
+      pid2.setPulse(lvertical1 + 50);
+      setpointV = lvertical1;
+    }
+
+    if (setpointV != 0)
+    {
+      horizontalflag = true;
+      start = 0;
+      
+    }
+  }
+
+  if (start == 3)
+  {
+    //    pid1.compute();
+    if (abs(setpointV - m1.getReadings()) <= 50 && verticalflag == false)
+    {
+      setpointH = (m2.getReadings() - 100);
+      pid1.setPulse(setpointH);
+      verticalflag = true;
+      horizontalflag = false;
+      start = 0;
+    }
+  }
+
+  if (start == 4)
+  {
+    initreset();
+  }
+}

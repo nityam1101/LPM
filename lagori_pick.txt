@@ -1,0 +1,182 @@
+#include <positionalnew.h>
+
+#define grabPWMpin 13
+#define grabDIRpin 14
+#define grabENC1pin 26
+#define grabENC2pin 27
+
+#define stackPWMpin 4
+#define stackDIRpin 15
+#define stackENC1pin 32
+#define stackENC2pin 33
+
+#define lsDown 23
+#define lsClose 22
+
+UniversalEncoder grabMotorEnc(grabENC1pin, grabENC2pin), stachMotorEnc(stackENC1pin, stackENC2pin);
+Motor grab_motor(grabPWMpin, grabDIRpin), stack_motor(stackPWMpin, stackDIRpin);
+positionalnew stackPID(&stack_motor), grabPID(&grab_motor);
+
+int start = 0, setpointH = 0, setpointV = 0, stack_pwm = 0, grab_pwm = 0;
+bool m1stop = false, verticalflag = false, m2stop = true, horizontalflag = false;
+//int lvertical5 = 5500,
+//    lvertical4 = 10250,
+//    lvertical3 = 14890,
+//    lvertical2 = 19680,
+//    lvertical1 = 22335,
+//
+//    lhorizontal5 = 1400,
+//    lhorizontal4 = 2561,
+//    lhorizontal3 = 3433,
+//    lhorizontal2 = 4838,
+//    lhorizontal1 = 5850;
+
+ int lvertical5 = 1200,
+    lvertical4 = 1200,
+    lvertical3 = 1200,
+    lvertical2 = 1200,
+    lvertical1 = 1200,
+
+    lhorizontal5 = 300,
+    lhorizontal4 = 1000,
+    lhorizontal3 = 1400,
+    lhorizontal2 = 1800,
+    lhorizontal1 = 2200;
+
+void initreset()
+{
+  stack_motor.setPWM(0);
+  grab_motor.setPWM(0);
+  stackPID.setPulse(stack_motor.getReadings());
+  grabPID.setPulse(grab_motor.getReadings());
+  setpointH = 0;
+  setpointV = 0;
+  m1stop = false, m2stop = true, verticalflag = false, horizontalflag = false;
+}
+
+void setup()
+{
+  Serial.begin(115200);
+
+  pinMode(lsDown, INPUT_PULLUP);
+  pinMode(lsClose, INPUT_PULLUP);
+
+  stack_motor.setEncoder(&stachMotorEnc);
+  grab_motor.setEncoder(&grabMotorEnc);
+
+  stackPID.setThreshold(400);
+  stackPID.setOutputLimits(-100, 100);
+  stackPID.setAggTunings(1.09, 0, 0);
+  stackPID.setSoftTunings(0.2, 0, 0);
+
+  grabPID.setThreshold(0);
+  grabPID.setOutputLimits(-100, 100);
+  grabPID.setAggTunings(1.09, 0, 0);
+  grabPID.setSoftTunings(1, 0, 0);
+}
+void loop()
+{
+  if (Serial.available())
+  {
+    start = Serial.readStringUntil(',').toInt();
+    stack_pwm = Serial.readStringUntil(',').toInt();
+    grab_pwm = Serial.readStringUntil('\n').toInt();
+  }
+
+  Serial.println(String(stack_motor.getReadings()) + ", " + String(grab_motor.getReadings()) + ", " + String(digitalRead(lsDown)) + ", " + String(digitalRead(lsClose)) + ", " + String(stack_pwm) + ", " + String(grab_pwm)); // + ", " + String(stackPID.Input) + ", " + String(stackPID.Output) + ", " + String(stackPID.Setpoint) + ", ");
+
+  if (start == 0)
+  {
+    if (horizontalflag)
+    {
+     Serial.println(String(stackPID.Input) + ", " + String(stackPID.Output) + ", " + String(stackPID.Setpoint) + ", ");
+      stackPID.compute();
+    }
+
+    if (verticalflag)
+    {
+      Serial.println(String(grabPID.Input) + ", " + String(grabPID.Output) + ", " + String(grabPID.Setpoint) + ", ");
+      grabPID.compute();
+    }
+  }
+
+  if (start == 1)
+  {
+    m1stop = false;
+    if (digitalRead(lsDown) == HIGH && !m1stop)
+    {
+      stack_motor.setPWM(-stack_pwm);
+    }
+    else if (digitalRead(lsDown) == LOW && !m1stop)
+    {
+      m1stop = true;
+      stack_motor.setPWM(0);
+      stack_motor.reset();
+      start = -1;
+    }
+  }
+
+  if (digitalRead(lsClose) == LOW)
+  {
+    grab_motor.setPWM(grab_pwm);
+    m2stop = false;
+  }
+  else if (m2stop == false)
+  {
+    grab_motor.setPWM(0);
+    m2stop = true;
+  }
+
+  if (start == 2)
+  {
+    if (abs(lhorizontal5 - grab_motor.getReadings()) <= 400)
+    {
+      stackPID.setPulse(lvertical5 + 50);
+      setpointV = lvertical5;
+    }
+    else if (abs(lhorizontal4 - grab_motor.getReadings()) <= 400)
+    {
+      stackPID.setPulse(lvertical4 + 50);
+      setpointV = lvertical4;
+    }
+    else if (abs(lhorizontal3 - grab_motor.getReadings()) <= 400)
+    {
+      stackPID.setPulse(lvertical3 + 50);
+      setpointV = lvertical3;
+    }
+    else if (abs(lhorizontal2 - grab_motor.getReadings()) <= 400)
+    {
+      stackPID.setPulse(lvertical2 + 50);
+      setpointV = lvertical2;
+    }
+    else if (abs(lhorizontal1 - grab_motor.getReadings()) <= 400)
+    {
+      stackPID.setPulse(lvertical1 + 50);
+      setpointV = lvertical1;
+    }
+
+    if (setpointV != 0)
+    {
+      horizontalflag = true;
+      verticalflag = false;
+      start = 0;
+    }
+  }
+
+  if (start == 3)
+  {
+    if (abs(setpointV - stack_motor.getReadings()) <= 200 && verticalflag == false)
+    {
+      setpointH = (grab_motor.getReadings() - 300);
+      grabPID.setPulse(setpointH);
+      verticalflag = true;
+      horizontalflag = false;
+      start = 0;
+    }
+  }
+
+  if (start == 4)
+  {
+    initreset();
+  }
+}
